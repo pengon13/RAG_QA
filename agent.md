@@ -10,6 +10,7 @@
   - 입력: 사용자 PC에서 PDF/CSV/JSON 업로드 → 세션별 임시 워크스페이스 생성·정리.
   - 메타 필수: `product_name`/`model_id`, `version`, `region`(있는 경우) 저장 → 비교 시 매칭 키로 사용.
   - 도구: LlamaIndex document loaders. 초기 CLI/스크립트, 후속 PySide6 GUI.
+  - 업데이트: 동일 `doc_id`(파일명)로 재업로드 시 기존 레코드 삭제 후 재인입 옵션 제공; 구버전 보존 시에는 `version`을 변경해 공존 가능.
 
 - **전처리·데이터 핸들링 (테이블 품질 최적화)**
   - 파이프라인: Marker 1차(레이아웃/표) → camelot/tabula 표 보정 → pymupdf/pdfplumber 텍스트 → OCR tesseract(+layoutparser) → 단위 정규화 pint.
@@ -31,6 +32,7 @@
   - 필터: `doc_id`, `component_type`, `version`, `table_flag`, `upload_session`.
   - 하이브리드: Qdrant sparse/BM25 또는 간단 TF-IDF로 part number·키워드 보완.
   - 도구: Qdrant 로컬 서비스.
+  - 업데이트 정책: `doc_id` 기준 삭제 후 재인입(덮어쓰기) 또는 `version` 필터로 공존 관리.
 
 - **검색·리랭크 (CPU 전제)**
   - 전처리: 모델명 정규화, 단위 변환, 동의어 매핑(예: “소비전력” → “power consumption”); 질의에서 `product_name`/`model_id` 엔티티 추출 후 필터.
