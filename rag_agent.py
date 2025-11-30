@@ -51,12 +51,6 @@ try:
 except ImportError:
     pd = None
 
-try:
-    from sentence_transformers import CrossEncoder
-except ImportError:
-    CrossEncoder = None
-
-
 EMBED_MODEL = "text-embedding-3-large"
 EMBED_DIM = 3072  # text-embedding-3-large output size
 
@@ -99,7 +93,9 @@ class RAGAgent:
         self.reranker = self._init_reranker() if self.cfg.use_reranker else None
 
     def _init_reranker(self):
-        if CrossEncoder is None:
+        try:
+            from sentence_transformers import CrossEncoder
+        except Exception:
             return None
         try:
             return CrossEncoder("BAAI/bge-reranker-base")
