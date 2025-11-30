@@ -29,6 +29,7 @@ import requests
 from openai import OpenAI
 from qdrant_client import QdrantClient
 from qdrant_client.http import models as rest
+from dotenv import load_dotenv
 
 from dotenv import load_dotenv
 load_dotenv(r"D:\python\.env")
@@ -407,6 +408,7 @@ def parse_args() -> argparse.Namespace:
     ing.add_argument("--replace-existing", action="store_true", help="Delete existing doc_id (filename) before ingest")
     ing.add_argument("--page-start", type=int, help="1-based start page to ingest (inclusive)")
     ing.add_argument("--page-end", type=int, help="1-based end page to ingest (inclusive)")
+    ing.add_argument("--env-file", default=".env", help="Path to .env file containing OPENAI_API_KEY")
 
     qry = sub.add_parser("query", help="Query a session collection")
     qry.add_argument("--session", required=True, help="Session/collection id")
@@ -414,12 +416,16 @@ def parse_args() -> argparse.Namespace:
     qry.add_argument("--product-name", action="append", help="Filter by product name (repeatable)")
     qry.add_argument("--model-id", action="append", help="Filter by model id (repeatable)")
     qry.add_argument("--top-k", type=int, default=12)
+    qry.add_argument("--env-file", default=".env", help="Path to .env file containing OPENAI_API_KEY")
 
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
+    env_path = Path(getattr(args, "env_file", ".env"))
+    if env_path.exists():
+        load_dotenv(env_path)
     agent = RAGAgent(config=RAGConfig())
     if args.command == "ingest":
         files = [Path(p) for p in args.files]
