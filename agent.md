@@ -28,7 +28,7 @@
   - 도구: OpenAI Embeddings API, LlamaIndex embedding wrappers.
 
 - **인덱스·스토어**
-  - 엔진: Qdrant(로컬) HNSW 컬렉션 per session.
+  - 엔진: Qdrant(HTTP 서버 사용 우선, 실패 시 임베디드 `qdrant_local` 폴더) HNSW 컬렉션 per session.
   - 필터: `doc_id`, `component_type`, `version`, `table_flag`, `upload_session`.
   - 하이브리드: Qdrant sparse/BM25 또는 간단 TF-IDF로 part number·키워드 보완.
   - 도구: Qdrant 로컬 서비스.
