@@ -30,6 +30,10 @@ from openai import OpenAI
 from qdrant_client import QdrantClient
 from qdrant_client.http import models as rest
 
+from dotenv import load_dotenv
+load_dotenv(r"D:\python\.env")
+
+
 # Optional heavy dependencies
 try:
     import fitz  # PyMuPDF
@@ -111,6 +115,8 @@ class RAGAgent:
         version: Optional[str] = None,
         region: Optional[str] = None,
         replace_existing: bool = False,
+        page_start: Optional[int] = None,
+        page_end: Optional[int] = None,
     ) -> None:
         collection = self._session_collection(session_id)
         self._ensure_collection(collection)
@@ -120,12 +126,20 @@ class RAGAgent:
             ext = file_path.suffix.lower()
             if replace_existing:
                 self._delete_doc(collection, file_path.name)
-            if ext == ".pdf":
-                chunks.extend(self._process_pdf(file_path, session_id, product_name, model_id, version, region))
-            elif ext in {".csv", ".json"}:
-                chunks.extend(self._process_structured(file_path, session_id, product_name, model_id, version, region))
-            else:
-                raise ValueError(f"Unsupported file type: {file_path}")
+            if ext != ".pdf":
+                raise ValueError(f"Only PDF is supported. Unsupported file type: {file_path}")
+            chunks.extend(
+                self._process_pdf(
+                    file_path,
+                    session_id,
+                    product_name,
+                    model_id,
+                    version,
+                    region,
+                    page_start=page_start,
+                    page_end=page_end,
+                )
+            )
 
         if not chunks:
             return
@@ -151,9 +165,11 @@ class RAGAgent:
         model_id: Optional[str],
         version: Optional[str],
         region: Optional[str],
+        page_start: Optional[int],
+        page_end: Optional[int],
     ) -> List[Chunk]:
-        text_blocks = self._pdf_text_blocks(path)
-        table_blocks = self._pdf_tables(path)
+        text_blocks = self._pdf_text_blocks(path, page_start=page_start, page_end=page_end)
+        table_blocks = self._pdf_tables(path, page_start=page_start, page_end=page_end)
 
         chunks: List[Chunk] = []
         base_meta = {
@@ -215,23 +231,35 @@ class RAGAgent:
                 md = pd.json_normalize(data).to_markdown(index=False)
         return [Chunk(text=md, metadata=base_meta, table_flag=True)]
 
-    def _pdf_text_blocks(self, path: Path) -> List[Tuple[int, str]]:
+    def _pdf_text_blocks(self, path: Path, page_start: Optional[int], page_end: Optional[int]) -> List[Tuple[int, str]]:
         blocks: List[Tuple[int, str]] = []
         if fitz is None:
             return blocks
+        start_idx = (page_start - 1) if page_start else 0
+        end_idx = (page_end - 1) if page_end else None
         with fitz.open(path) as doc:
             for i, page in enumerate(doc):
+                if i < start_idx:
+                    continue
+                if end_idx is not None and i > end_idx:
+                    break
                 text = page.get_text("text")
                 if text.strip():
                     blocks.append((i, text))
         return blocks
 
-    def _pdf_tables(self, path: Path) -> List[Dict[str, Any]]:
+    def _pdf_tables(self, path: Path, page_start: Optional[int], page_end: Optional[int]) -> List[Dict[str, Any]]:
         tables: List[Dict[str, Any]] = []
         if pdfplumber is None or pd is None:
             return tables
+        start_idx = (page_start - 1) if page_start else 0
+        end_idx = (page_end - 1) if page_end else None
         with pdfplumber.open(path) as pdf:
             for page_idx, page in enumerate(pdf.pages):
+                if page_idx < start_idx:
+                    continue
+                if end_idx is not None and page_idx > end_idx:
+                    break
                 raw_tables = page.extract_tables()
                 for tbl in raw_tables:
                     if not tbl:
@@ -371,12 +399,14 @@ def parse_args() -> argparse.Namespace:
 
     ing = sub.add_parser("ingest", help="Ingest documents into a session collection")
     ing.add_argument("--session", required=True, help="Session/collection id")
-    ing.add_argument("--files", nargs="+", required=True, help="Paths to files (pdf/csv/json)")
+    ing.add_argument("--files", nargs="+", required=True, help="Paths to files (PDF only)")
     ing.add_argument("--product-name")
     ing.add_argument("--model-id")
     ing.add_argument("--version")
     ing.add_argument("--region")
     ing.add_argument("--replace-existing", action="store_true", help="Delete existing doc_id (filename) before ingest")
+    ing.add_argument("--page-start", type=int, help="1-based start page to ingest (inclusive)")
+    ing.add_argument("--page-end", type=int, help="1-based end page to ingest (inclusive)")
 
     qry = sub.add_parser("query", help="Query a session collection")
     qry.add_argument("--session", required=True, help="Session/collection id")
@@ -401,6 +431,8 @@ def main() -> None:
             version=args.version,
             region=args.region,
             replace_existing=args.replace_existing,
+            page_start=args.page_start,
+            page_end=args.page_end,
         )
         print(f"Ingested {len(files)} file(s) into session '{args.session}'.")
     elif args.command == "query":
