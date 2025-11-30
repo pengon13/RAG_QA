@@ -10,3 +10,4 @@ tabula-py==2.9.0
 pytesseract==0.3.10
 layoutparser==0.3.4
 marker-pdf==0.2.4
+httpx==0.27.2
