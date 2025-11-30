@@ -1,0 +1,42 @@
+
+ PySide6 GUI 설계 명세 (RAG 클라이언트)
+
+  - 레이아웃
+      - 상단 탭 3개: 업로드, 질의, 설정
+      - 하단: PDF 뷰어(페이지 이동, bbox 하이라이트)
+      - 별도 로그 패널: 우측 또는 하단에 토글 가능한 영역으로 파싱/임베딩/검색/에러 로그 표시
+  - 업로드 탭
+      - 입력: 세션 선택/생성, 파일 선택(PDF만), 페이지 범위 필수 입력(예: 30–80), replace existing 체크박스
+      - 메타 입력: product_name, model_id, version, region (텍스트 필드)
+      - 진행 표시: 인입 진행률/스피너, 성공/실패 로그 출력
+      - 실행 버튼: “인입/임베딩 실행” → Qdrant에 업서트
+  - 질의 탭
+      - 질문 입력 필드
+      - 비교 모드: 제품/모델 멀티셀렉트 콤보(여러 product_name/model_id 선택), compare 스위치
+      - 고급 설정(슬라이더/스핀박스): top_k, rerank_top_n
+      - 리랭커 토글: 기본 On, 느리면 Off 가능
+      - 실행 버튼: 검색→(옵션)리랭크→LLM 생성
+      - 결과 영역: 답변(불릿/표), 비교 시 Notes 열 포함 테이블, 출처 태그 리스트
+      - 출처 클릭: 새 탭에 PDF 페이지를 열고 해당 bbox 하이라이트(뷰어 탭 추가)
+  - 설정 탭
+      - .env 경로 선택(파일 다이얼로그), 기본은 실행 디렉터리 .env
+      - .env 재로딩 버튼, 로딩 성공/실패 상태 표시
+      - Qdrant 상태: HTTP 우선 연결 상태 표시, 실패 시 임베디드(./qdrant_local)로 자동 전환 뱃지 표시
+  - PDF 뷰어 (하단)
+      - 페이지 네비게이션, 줌
+      - 하이라이트 오버레이: 출처 태그 클릭 시 해당 페이지+bbox 강조
+      - 여러 출처를 새 탭으로 열 수 있음
+  - 상태/데이터 모델
+      - Session: id, page_range, replace_existing, created_at
+      - Document: doc_id, product_name, model_id, version, region, page_range
+      - Query: question, filters(product_name/model_id), compare flag, top_k, rerank_top_n, reranker_on
+      - Result: answer text, contexts[{doc_id, page, bbox, score, snippet, source_tag}]
+  - 오류 처리
+      - 필수 입력 누락(파일/페이지 범위/질문/세션): 즉시 다이얼로그 경고
+      - Qdrant 연결 실패: 설정 탭에 경고, 자동 임베디드 전환 안내
+      - 파싱/임베딩 오류: 로그 패널에 상세 출력, 재시도 버튼
+  - 흐름 요약
+      1. 설정 탭에서 .env 경로 확인/변경 → 로딩
+      2. 업로드 탭: 세션 선택→PDF 선택→페이지 범위 입력→메타 입력→(필요 시 replace)→인입
+      3. 질의 탭: 질문 입력→비교 시 멀티셀렉트→top_k/rerank 설정→실행→답변/출처 표시
+      4. 출처 클릭→PDF 뷰어 새 탭 하이라이트
