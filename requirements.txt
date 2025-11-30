@@ -1,0 +1,12 @@
+openai==1.40.0
+qdrant-client==1.9.0
+sentence-transformers==2.7.0
+pandas==2.2.2
+pdfplumber==0.11.2
+pymupdf==1.24.9
+pillow==10.4.0
+camelot-py==0.11.0
+tabula-py==2.9.0
+pytesseract==0.3.10
+layoutparser==0.3.4
+marker-pdf==0.2.4
