@@ -288,6 +288,12 @@ class MainWindow(QtWidgets.QMainWindow):
             self._log(f".env not found at {path}", error=True)
 
     def _init_agent(self):
+        # Close previous embedded client to avoid qdrant_local lock when reloading .env
+        try:
+            if self.agent and getattr(self.agent, "qdrant", None):
+                self.agent.qdrant.close()
+        except Exception:
+            pass
         try:
             self.agent = RAGAgent(config=RAGConfig())
             # Check Qdrant connectivity
