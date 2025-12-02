@@ -128,6 +128,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self._init_settings_tab()
         self._init_log_dock()
 
+        self._workers: List[QtCore.QThread] = []
+
         self._load_env(self.env_path)
         self._init_agent()
 
@@ -337,8 +339,9 @@ class MainWindow(QtWidgets.QMainWindow):
             page_end=pe,
             replace=self.replace_check.isChecked(),
         )
-        worker.finished.connect(lambda msg: self._log(msg))
-        worker.failed.connect(lambda err: self._log(f"Ingest failed: {err}", error=True))
+        self._workers.append(worker)
+        worker.finished.connect(lambda msg, w=worker: (self._log(msg), self._cleanup_worker(w)))
+        worker.failed.connect(lambda err, w=worker: (self._log(f"Ingest failed: {err}", error=True), self._cleanup_worker(w)))
         worker.start()
 
     def _run_query(self):
@@ -368,8 +371,9 @@ class MainWindow(QtWidgets.QMainWindow):
             model_ids=models,
             top_k=top_k,
         )
-        worker.finished.connect(self._show_answer)
-        worker.failed.connect(lambda err: self._log(f"Query failed: {err}", error=True))
+        self._workers.append(worker)
+        worker.finished.connect(lambda res, w=worker: (self._show_answer(res), self._cleanup_worker(w)))
+        worker.failed.connect(lambda err, w=worker: (self._log(f"Query failed: {err}", error=True), self._cleanup_worker(w)))
         worker.start()
 
     def _add_product(self):
@@ -400,6 +404,20 @@ class MainWindow(QtWidgets.QMainWindow):
     def _log(self, msg: str, error: bool = False):
         prefix = "[ERR] " if error else "[INFO] "
         self.log_panel.appendPlainText(prefix + msg)
+
+    def _cleanup_worker(self, worker: QtCore.QThread):
+        try:
+            if worker.isRunning():
+                worker.quit()
+                worker.wait(2000)
+        except Exception:
+            pass
+        try:
+            worker.deleteLater()
+        except Exception:
+            pass
+        if worker in self._workers:
+            self._workers.remove(worker)
 
 
 def main():
