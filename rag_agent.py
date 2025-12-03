@@ -25,7 +25,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-import requests
 from openai import OpenAI
 from qdrant_client import QdrantClient
 from qdrant_client.http import models as rest
@@ -85,11 +84,13 @@ class RAGAgent:
             raise RuntimeError("OPENAI_API_KEY is required.")
         self.openai = OpenAI(api_key=key)
         # Prefer HTTP endpoint; fallback to embedded (path) if unreachable
+        self.qdrant_mode = "http"
         try:
             self.qdrant = QdrantClient(url=self.cfg.qdrant_url, timeout=3)
             self.qdrant.get_collections()
         except Exception:
             self.qdrant = QdrantClient(path=self.cfg.qdrant_path)
+            self.qdrant_mode = "embedded"
         self.reranker = self._init_reranker() if self.cfg.use_reranker else None
 
     def _init_reranker(self):
@@ -165,6 +166,8 @@ class RAGAgent:
         page_start: Optional[int],
         page_end: Optional[int],
     ) -> List[Chunk]:
+        if fitz is None:
+            raise RuntimeError("PyMuPDF (fitz) is required for PDF ingestion. Install pymupdf.")
         text_blocks = self._pdf_text_blocks(path, page_start=page_start, page_end=page_end)
         table_blocks = self._pdf_tables(path, page_start=page_start, page_end=page_end)
 
@@ -366,6 +369,7 @@ class RAGAgent:
 
 
 def chunk_texts(text: str, chunk_size: int, overlap: int) -> Iterable[str]:
+    # Simple whitespace chunking; adjust to token-aware splitting if needed.
     words = text.split()
     step = max(1, chunk_size - overlap)
     idx = 0
@@ -376,6 +380,7 @@ def chunk_texts(text: str, chunk_size: int, overlap: int) -> Iterable[str]:
 
 
 def build_prompt(question: str, contexts: List[Dict[str, Any]], max_tokens: int) -> str:
+    # Build a compact prompt with numbered source tags for traceability.
     lines = ["주어진 컨텍스트만 활용해 답변하세요. 출처를 [문서명, 페이지] 형식의 태그로 표시하세요.", "컨텍스트:"]
     for i, ctx in enumerate(contexts, start=1):
         payload = ctx["payload"]

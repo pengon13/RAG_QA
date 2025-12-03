@@ -5,7 +5,6 @@ Features (baseline):
 - Tabs: Upload / Query / Settings
 - PDF-only upload with page range, metadata, replace flag
 - Query with product/model multi-select, top_k & rerank sliders, reranker toggle
-- Logs panel
 - Settings: .env path selection & reload, Qdrant status indicator
 
 Note: PDF rendering with bbox highlight is stubbed as a simple text viewer; extend with Qt PDF modules if needed.
@@ -14,7 +13,6 @@ Note: PDF rendering with bbox highlight is stubbed as a simple text viewer; exte
 from __future__ import annotations
 
 import sys
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional
 
@@ -120,18 +118,14 @@ class MainWindow(QtWidgets.QMainWindow):
         self.tabs = QtWidgets.QTabWidget()
         self.setCentralWidget(self.tabs)
 
-        self.log_panel = QtWidgets.QPlainTextEdit()
-        self.log_panel.setReadOnly(True)
-
         self._init_upload_tab()
         self._init_query_tab()
         self._init_settings_tab()
-        self._init_log_dock()
-
         self._workers: List[QtCore.QThread] = []
 
         self._load_env(self.env_path)
         self._init_agent()
+        self._apply_button_style()
 
     # ---- Tabs ----
     def _init_upload_tab(self):
@@ -171,6 +165,9 @@ class MainWindow(QtWidgets.QMainWindow):
         layout.addRow("Region", self.region_input)
         layout.addRow(self.upload_button)
 
+        layout.setVerticalSpacing(20)
+        layout.setContentsMargins(10, 10, 10, 10)
+
         w.setLayout(layout)
         self.tabs.addTab(w, "업로드")
 
@@ -186,6 +183,8 @@ class MainWindow(QtWidgets.QMainWindow):
         # Product/Model multi-select via list widgets
         self.prod_entry = QtWidgets.QLineEdit()
         self.prod_add_btn = QtWidgets.QPushButton("Add product")
+        self.prod_add_btn.setMinimumHeight(32)
+        self.prod_add_btn.setStyleSheet("font-size: 10pt;")
         self.prod_list = QtWidgets.QListWidget()
         self.prod_add_btn.clicked.connect(self._add_product)
         prod_box = QtWidgets.QHBoxLayout()
@@ -194,6 +193,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.model_entry = QtWidgets.QLineEdit()
         self.model_add_btn = QtWidgets.QPushButton("Add model")
+        self.model_add_btn.setMinimumHeight(32)
+        self.model_add_btn.setStyleSheet("font-size: 10pt;")
         self.model_list = QtWidgets.QListWidget()
         self.model_add_btn.clicked.connect(self._add_model)
         model_box = QtWidgets.QHBoxLayout()
@@ -204,7 +205,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.topk_slider.setMinimum(4)
         self.topk_slider.setMaximum(32)
         self.topk_slider.setValue(12)
-        self.topk_label = QtWidgets.QLabel("top_k: 12")
+        self.topk_label = QtWidgets.QLabel("top_k: 10")
         self.topk_slider.valueChanged.connect(lambda v: self.topk_label.setText(f"top_k: {v}"))
 
         self.rerank_slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
@@ -226,13 +227,16 @@ class MainWindow(QtWidgets.QMainWindow):
         layout.addRow("Session ID", self.query_session_input)
         layout.addRow("Question", self.question_input)
         layout.addRow("Product names", prod_box)
+        self.prod_list.setMaximumHeight(60)
         layout.addRow(self.prod_list)
         layout.addRow("Model IDs", model_box)
+        self.model_list.setMaximumHeight(60)
         layout.addRow(self.model_list)
         layout.addRow(self.topk_label, self.topk_slider)
         layout.addRow(self.rerank_label, self.rerank_slider)
         layout.addRow(self.rerank_toggle)
         layout.addRow(self.query_button)
+        self.answer_view.setMinimumHeight(600)
         layout.addRow("Answer / Sources", self.answer_view)
 
         w.setLayout(layout)
@@ -261,11 +265,23 @@ class MainWindow(QtWidgets.QMainWindow):
         w.setLayout(layout)
         self.tabs.addTab(w, "설정")
 
-    def _init_log_dock(self):
-        dock = QtWidgets.QDockWidget("Logs", self)
-        dock.setWidget(self.log_panel)
-        dock.setAllowedAreas(QtCore.Qt.BottomDockWidgetArea | QtCore.Qt.RightDockWidgetArea)
-        self.addDockWidget(QtCore.Qt.BottomDockWidgetArea, dock)
+    def _apply_button_style(self):
+        btns = []
+        for name in [
+            "file_button",
+            "upload_button",
+            "query_button",
+            "env_button",
+            "env_reload_btn",
+        ]:
+            b = getattr(self, name, None)
+            if b:
+                btns.append(b)
+        for b in btns:
+            b.setMinimumHeight(36)
+            f = b.font()
+            f.setPointSize(14)
+            b.setFont(f)
 
     # ---- Actions ----
     def _choose_files(self):
@@ -298,18 +314,13 @@ class MainWindow(QtWidgets.QMainWindow):
             pass
         try:
             self.agent = RAGAgent(config=RAGConfig())
-            # Check Qdrant connectivity
-            self.agent.qdrant.get_collections()
-            self.qdrant_status.setText("Qdrant: HTTP OK")
-        except Exception:
-            # Attempt embedded
-            try:
-                self.agent = RAGAgent(config=RAGConfig(qdrant_url="http://localhost:6333"))
-                self.qdrant_status.setText("Qdrant: fallback")
-            except Exception as e:
-                self.agent = None
-                self.qdrant_status.setText("Qdrant: unavailable")
-                self._log(f"Failed to init agent: {e}", error=True)
+            # Reflect actual qdrant mode reported by the agent
+            mode = getattr(self.agent, "qdrant_mode", "http")
+            self.qdrant_status.setText(f"Qdrant: {mode}")
+        except Exception as e:
+            self.agent = None
+            self.qdrant_status.setText("Qdrant: unavailable")
+            self._log(f"Failed to init agent: {e}", error=True)
 
     def _run_ingest(self):
         if not self.agent:
@@ -403,7 +414,27 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _log(self, msg: str, error: bool = False):
         prefix = "[ERR] " if error else "[INFO] "
-        self.log_panel.appendPlainText(prefix + msg)
+        print(prefix + msg)
+
+    def _apply_button_style(self):
+        btns = []
+        for name in [
+            "file_button",
+            "upload_button",
+            "prod_add_btn",
+            "model_add_btn",
+            "query_button",
+            "env_button",
+            "env_reload_btn",
+        ]:
+            b = getattr(self, name, None)
+            if b:
+                btns.append(b)
+        for b in btns:
+            b.setMinimumHeight(36)
+            f = b.font()
+            f.setPointSize(14)
+            b.setFont(f)
 
     def _cleanup_worker(self, worker: QtCore.QThread):
         try:
