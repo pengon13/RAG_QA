@@ -28,6 +28,8 @@ def main() -> None:
         "qdrant_client",
         "--add-data",
         ".env;.env",
+        "--icon",
+        str(root / "icon.png"),
     ]
 
     print("Running:", " ".join(cmd))
