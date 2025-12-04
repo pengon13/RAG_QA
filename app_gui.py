@@ -205,7 +205,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.topk_slider.setMinimum(4)
         self.topk_slider.setMaximum(32)
         self.topk_slider.setValue(12)
-        self.topk_label = QtWidgets.QLabel("top_k: 10")
+        self.topk_label = QtWidgets.QLabel("top_k: 12")
         self.topk_slider.valueChanged.connect(lambda v: self.topk_label.setText(f"top_k: {v}"))
 
         self.rerank_slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
@@ -220,6 +220,11 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.query_button = QtWidgets.QPushButton("질의 실행")
         self.query_button.clicked.connect(self._run_query)
+        self.clear_answer_button = QtWidgets.QPushButton("답변 내용 지우기")
+        self.clear_answer_button.clicked.connect(self._clear_answer)
+        btn_box = QtWidgets.QHBoxLayout()
+        btn_box.addWidget(self.query_button)
+        btn_box.addWidget(self.clear_answer_button)
 
         self.answer_view = QtWidgets.QTextEdit()
         self.answer_view.setReadOnly(True)
@@ -235,7 +240,7 @@ class MainWindow(QtWidgets.QMainWindow):
         layout.addRow(self.topk_label, self.topk_slider)
         layout.addRow(self.rerank_label, self.rerank_slider)
         layout.addRow(self.rerank_toggle)
-        layout.addRow(self.query_button)
+        layout.addRow(btn_box)
         self.answer_view.setMinimumHeight(600)
         layout.addRow("Answer / Sources", self.answer_view)
 
@@ -271,6 +276,7 @@ class MainWindow(QtWidgets.QMainWindow):
             "file_button",
             "upload_button",
             "query_button",
+            "clear_answer_button",
             "env_button",
             "env_reload_btn",
         ]:
@@ -409,32 +415,20 @@ class MainWindow(QtWidgets.QMainWindow):
             page = payload.get("page", "?")
             score = ctx.get("score", 0)
             src_lines.append(f"[{i}] {doc} p{page} (score {score:.3f})")
-        self.answer_view.setPlainText(ans + "\n\nSources:\n" + "\n".join(src_lines))
+        block = ans + "\n\nSources:\n" + "\n".join(src_lines)
+        # Append to preserve previous answers; separate with a line.
+        if self.answer_view.toPlainText().strip():
+            self.answer_view.append("\n---\n")
+        self.answer_view.append(block)
         self._log("Query completed.")
+
+    def _clear_answer(self):
+        self.answer_view.clear()
+        self._log("Cleared answers.")
 
     def _log(self, msg: str, error: bool = False):
         prefix = "[ERR] " if error else "[INFO] "
         print(prefix + msg)
-
-    def _apply_button_style(self):
-        btns = []
-        for name in [
-            "file_button",
-            "upload_button",
-            "prod_add_btn",
-            "model_add_btn",
-            "query_button",
-            "env_button",
-            "env_reload_btn",
-        ]:
-            b = getattr(self, name, None)
-            if b:
-                btns.append(b)
-        for b in btns:
-            b.setMinimumHeight(36)
-            f = b.font()
-            f.setPointSize(14)
-            b.setFont(f)
 
     def _cleanup_worker(self, worker: QtCore.QThread):
         try:
