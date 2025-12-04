@@ -23,6 +23,7 @@ from rag_agent import RAGAgent, RAGConfig
 
 
 # ----------------- Worker threads -----------------
+# 긴 작업(인입/질의)을 GUI 멈춤 없이 실행하기 위한 QThread 래퍼
 class IngestWorker(QtCore.QThread):
     finished = QtCore.Signal(str)
     failed = QtCore.Signal(str)
@@ -129,6 +130,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     # ---- Tabs ----
     def _init_upload_tab(self):
+        """업로드 탭: 세션/파일/페이지 범위/메타 입력"""
         w = QtWidgets.QWidget()
         layout = QtWidgets.QFormLayout()
 
@@ -174,6 +176,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.selected_files: List[Path] = []
 
     def _init_query_tab(self):
+        """질의 탭: 질문 입력, 멀티 선택 필터, 고급 파라미터, 결과 영역"""
         w = QtWidgets.QWidget()
         layout = QtWidgets.QFormLayout()
 
@@ -248,6 +251,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.tabs.addTab(w, "질의")
 
     def _init_settings_tab(self):
+        """설정 탭: .env 경로 선택/재로딩, Qdrant 상태 표시"""
         w = QtWidgets.QWidget()
         layout = QtWidgets.QFormLayout()
 
@@ -271,6 +275,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.tabs.addTab(w, "설정")
 
     def _apply_button_style(self):
+        """주요 버튼의 크기/폰트를 일괄 적용"""
         btns = []
         for name in [
             "file_button",
@@ -329,6 +334,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self._log(f"Failed to init agent: {e}", error=True)
 
     def _run_ingest(self):
+        """PDF 업로드→파싱→임베딩→Qdrant 업서트"""
         if not self.agent:
             self._log("Agent not initialized", error=True)
             return
@@ -362,6 +368,7 @@ class MainWindow(QtWidgets.QMainWindow):
         worker.start()
 
     def _run_query(self):
+        """질문 실행: 검색→(옵션)리랭크→생성"""
         if not self.agent:
             self._log("Agent not initialized", error=True)
             return

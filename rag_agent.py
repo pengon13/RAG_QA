@@ -78,6 +78,7 @@ class RAGConfig:
 
 class RAGAgent:
     def __init__(self, openai_api_key: Optional[str] = None, config: Optional[RAGConfig] = None):
+        # 기본 설정과 OpenAI 키 로드
         self.cfg = config or RAGConfig()
         key = openai_api_key or os.getenv("OPENAI_API_KEY")
         if not key:
@@ -116,6 +117,7 @@ class RAGAgent:
         page_start: Optional[int] = None,
         page_end: Optional[int] = None,
     ) -> None:
+        """PDF 파일을 인입하고 임베딩→Qdrant 업서트."""
         collection = self._session_collection(session_id)
         self._ensure_collection(collection)
 
@@ -168,6 +170,7 @@ class RAGAgent:
     ) -> List[Chunk]:
         if fitz is None:
             raise RuntimeError("PyMuPDF (fitz) is required for PDF ingestion. Install pymupdf.")
+        # 지정된 페이지 범위의 텍스트/테이블 추출
         text_blocks = self._pdf_text_blocks(path, page_start=page_start, page_end=page_end)
         table_blocks = self._pdf_tables(path, page_start=page_start, page_end=page_end)
 
@@ -282,10 +285,12 @@ class RAGAgent:
         model_ids: Optional[List[str]] = None,
         top_k: Optional[int] = None,
     ) -> Dict[str, Any]:
+        """질문에 대해 검색→(옵션)리랭크→LLM 생성까지 수행."""
         collection = self._session_collection(session_id)
         top_k = top_k or self.cfg.top_k
         query_vector = self._embed_texts([question])[0]
 
+        # 1차 검색: Qdrant HNSW, 제품/모델 필터 적용
         scored: List[Dict[str, Any]] = []
         qfilter = self._build_filter_qdrant(product_names, model_ids)
         search_params = rest.SearchParams(
@@ -312,6 +317,7 @@ class RAGAgent:
 
         reranked = self._rerank(question, scored)
         top_contexts = reranked[: self.cfg.rerank_top_n]
+        # LLM 프롬프트 구성 및 호출
         prompt = build_prompt(question, top_contexts, self.cfg.max_tokens_prompt)
         answer = self._call_llm(prompt)
 
@@ -339,10 +345,12 @@ class RAGAgent:
 
     # ---------------------------- Helpers ----------------------------
     def _embed_texts(self, texts: List[str]) -> List[List[float]]:
+        """OpenAI 임베딩 호출"""
         resp = self.openai.embeddings.create(model=EMBED_MODEL, input=texts)
         return [d.embedding for d in resp.data]
 
     def _call_llm(self, prompt: str) -> str:
+        """GPT-4o로 답변 생성"""
         messages = [
             {"role": "system", "content": "제품/부품 데이터시트 근거로만 답변하세요. 출처를 태그로 표시하고, 모르면 모른다고 답하세요."},
             {"role": "user", "content": prompt},
@@ -351,6 +359,7 @@ class RAGAgent:
         return resp.choices[0].message.content
 
     def _ensure_collection(self, name: str) -> None:
+        # 컬렉션이 없으면 생성
         existing = {c.name for c in self.qdrant.get_collections().collections}
         if name in existing:
             return
@@ -369,7 +378,7 @@ class RAGAgent:
 
 
 def chunk_texts(text: str, chunk_size: int, overlap: int) -> Iterable[str]:
-    # Simple whitespace chunking; adjust to token-aware splitting if needed.
+    # 공백 기준 단순 분할. 필요 시 토큰 단위 분할로 교체 가능.
     words = text.split()
     step = max(1, chunk_size - overlap)
     idx = 0
@@ -380,7 +389,7 @@ def chunk_texts(text: str, chunk_size: int, overlap: int) -> Iterable[str]:
 
 
 def build_prompt(question: str, contexts: List[Dict[str, Any]], max_tokens: int) -> str:
-    # Build a compact prompt with numbered source tags for traceability.
+    # 번호가 매겨진 컨텍스트를 포함한 프롬프트 생성
     lines = ["주어진 컨텍스트만 활용해 답변하세요. 출처를 [문서명, 페이지] 형식의 태그로 표시하세요.", "컨텍스트:"]
     for i, ctx in enumerate(contexts, start=1):
         payload = ctx["payload"]
