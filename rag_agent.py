@@ -30,9 +30,6 @@ from qdrant_client import QdrantClient
 from qdrant_client.http import models as rest
 from dotenv import load_dotenv
 
-from dotenv import load_dotenv
-load_dotenv(r"D:\python\.env")
-
 
 # Optional heavy dependencies
 try:
@@ -80,6 +77,8 @@ class RAGAgent:
     def __init__(self, openai_api_key: Optional[str] = None, config: Optional[RAGConfig] = None):
         # 기본 설정과 OpenAI 키 로드
         self.cfg = config or RAGConfig()
+        # 기본적으로 현재 실행 디렉터리의 .env를 로드해 키를 찾는다 (별도 경로가 없을 때용).
+        load_dotenv(Path.cwd() / ".env")
         key = openai_api_key or os.getenv("OPENAI_API_KEY")
         if not key:
             raise RuntimeError("OPENAI_API_KEY is required.")
@@ -332,8 +331,14 @@ class RAGAgent:
         return rest.Filter(must=must) if must else None
 
     def _rerank(self, question: str, docs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        if not self.reranker:
+        # GUI 토글을 고려해 use_reranker가 False면 건너뛴다.
+        if not self.cfg.use_reranker:
             return sorted(docs, key=lambda x: x["score"], reverse=True)
+        # 아직 로드되지 않았는데 사용 설정이면 한 번 시도한다.
+        if not self.reranker:
+            self.reranker = self._init_reranker()
+            if not self.reranker:
+                return sorted(docs, key=lambda x: x["score"], reverse=True)
         pairs = [[question, d["text"]] for d in docs]
         try:
             scores = self.reranker.predict(pairs)

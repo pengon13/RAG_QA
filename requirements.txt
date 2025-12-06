@@ -13,3 +13,5 @@ marker-pdf==0.2.4
 python-dotenv==1.0.1
 httpx==0.27.2
 PySide6==6.6.1
+jaraco.text==3.11.1
+platformdirs==4.3.6
